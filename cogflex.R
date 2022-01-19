@@ -2,6 +2,7 @@ library(readr)
 library(dplyr)
 library(ggplot2)
 library(grid)
+library(gridExtra)
 
 # Path to data file
 data_path = "~/Code/cognitive/HMM/real data interference/nback_interference_data.csv"
@@ -50,11 +51,18 @@ ID = rep(1:P, each=J)
 # Run Gibbs sampler
 setwd(code_dir)
 source(code_file)
-iter     = 25000
-state    = list(a=1:4, b=5:8, c=9:12)
-burnin   = 5000
-n_update = 500
-result   = gibbs_sampler(y, ID, iter, burnin, n_update, state)
+iter       = 60000
+state      = list("1"=1:4, "2"=5:8, "3"=9:12)
+num_regime = length(state)
+prior      = list(psi0 = rep(3, num_regime),
+                  psi1 = rep(3, num_regime),
+                  m    = rep(0, num_regime),
+                  tau2 = rep(1, num_regime),
+                  phi0 = 3,
+                  phi1 = 3)
+burnin     = 10000
+n_update   = iter/100
+result     = gibbs_sampler(y, ID, iter, state, prior, burnin, n_update)
 if(save){
   setwd(result_dir)
   save.image(file=result_file)
@@ -64,22 +72,22 @@ if(save){
 iter_range = (burnin+1):iter
 
 # Function for plotting trajectory
-trajectory = function(mu_beta_i, regime, indv, ID, y, cond, n_cp=NULL, top3=NULL){
+trajectory = function(beta_i, regime, indv, ID, y, cond, n_cp=NULL, top3=NULL){
   
   # Arguments:
-  # mu_beta_i - Posterior samples of mu + beta_i
-  # regime    - Posterior samples of regime
-  # indv      - Individual to plot
-  # ID        - Vector containing ID of individuals for each observation
-  # y         - Binary outcome
-  # cond      - T for plotting conditional trajectory, F for plotting unconditional trajectory
-  # n_cp      - Number of change points for starting from different regimes (only when cond=T)
-  # top3      - Number of change points with the top 3 highest conditional posterior probability (only when cond=T)
+  # beta_i - Posterior samples of beta_i
+  # regime - Posterior samples of regime
+  # indv   - Individual to plot
+  # ID     - Vector containing ID of individuals for each observation
+  # y      - Binary outcome
+  # cond   - T for plotting conditional trajectory, F for plotting unconditional trajectory
+  # n_cp   - Number of change points for starting from different regimes (only when cond=T)
+  # top3   - Number of change points with the top 3 highest conditional posterior probability (only when cond=T)
   
   J = nrow(regime)
   
   # Posterior probability of a correct outcome
-  prob_correct = sapply(1:dim(mu_beta_i)[2], function(i) pnorm(mu_beta_i[regime[,i],i]))
+  prob_correct = sapply(1:dim(beta_i)[2], function(i) pnorm(beta_i[regime[,i],i]))
   
   if(cond==T){ # Conditional trajectory
     
@@ -194,10 +202,9 @@ for(i in 1:P){
   top3 = as.numeric(names(top3)[order(top3, decreasing=T)[1:3]])
   
   most_probable = which.max(init$prop)
-  mu_beta_i     = result$beta_i[,,i,intersect(index[[most_probable]], iter_range)] +
-                  result$mu[,,intersect(index[[most_probable]], iter_range)]
+  beta_i        = result$beta_i[,i,intersect(index[[most_probable]], iter_range)]
   n_cp          = n_cp[n_cp$init_regime==as.character(most_probable),]
-  traj          = trajectory(mu_beta_i, regime[[most_probable]], i, ID, y, T, n_cp, top3)
+  traj          = trajectory(beta_i, regime[[most_probable]], i, ID, y, T, n_cp, top3)
   traj$n_cp     = factor(traj$n_cp, levels=top3)
   
   p3=ggplot(traj, aes(x=Trial, y=Outcome)) +
@@ -214,9 +221,9 @@ for(i in 1:P){
            legend.position = "right")
   
   # Unconditional trajectory
-  regime    = result$regime[,i,iter_range]
-  mu_beta_i = result$beta_i[,,i,iter_range] + result$mu[,,iter_range]
-  traj      = trajectory(mu_beta_i, regime, i, ID, y, F)
+  regime = result$regime[,i,iter_range]
+  beta_i = result$beta_i[,i,iter_range]
+  traj   = trajectory(beta_i, regime, i, ID, y, F)
   
   p4=ggplot(traj, aes(x=Trial, y=Outcome)) +
      geom_point() +
@@ -229,7 +236,7 @@ for(i in 1:P){
            axis.text = element_text(size=14),
            strip.text = element_text(size=14))
   
-  gridExtra::grid.arrange(p1, p2, p3, p4, layout_matrix = rbind(c(4,1,2,2), c(3,3,3,3)), top = textGrob(paste0("Individual: ", i),gp=gpar(fontsize=20,font=3)))
+  grid.arrange(p1, p2, p3, p4, layout_matrix = rbind(c(4,1,2,2), c(3,3,3,3)), top = textGrob(paste0("Individual: ", i),gp=gpar(fontsize=20,font=3)))
 }
 
 dev.off()
