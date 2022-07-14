@@ -283,11 +283,7 @@ gibbs_y_star = function(beta_i_all, lb, ub){
   # beta_i_all - vector containing posterior random effects for all observations
   # lb         - vector containing lower bounds of truncated normal distribution
   # ub         - vector containing upper bounds of truncated normal distribution
-  # 
-  # Reset all bounds to Inf:
-  lb = lb * -Inf
-  ub = ub * Inf
-  
+    
   y_star = rtruncnorm(1, lb, ub, beta_i_all, 1)
   
   return(y_star)
